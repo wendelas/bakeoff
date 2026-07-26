@@ -1,0 +1,48 @@
+# Fly.io — app de referencia do bake-off
+#
+# IMPORTANTE: a secao [build] com dockerfile explicito impede que o
+# Fly use Nixpacks. Buildpack proprietario amarra voce a plataforma;
+# Dockerfile roda em qualquer lugar. Nao remover.
+
+app = "bakeoff-monstrecos"
+primary_region = "gru"          # Sao Paulo
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "3000"
+  PROVIDER_NAME = "fly"
+  PROVIDER_REGION = "gru"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+
+  # auto_stop_machines = false e DELIBERADO.
+  #
+  # Com scale-to-zero ligado, a maquina hiberna sem trafego e a
+  # proxima requisicao paga cold start. Isso contaminaria a medicao:
+  # voce mediria hibernacao, nao latencia de rede.
+  #
+  # Para medir cold start, faca depois, como teste separado.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+
+[checks.health]
+  type = "http"
+  port = 3000
+  path = "/health"
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "10s"
