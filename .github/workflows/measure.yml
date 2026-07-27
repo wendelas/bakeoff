@@ -1,0 +1,73 @@
+name: Coleta do bake-off
+
+# Roda no runner do GitHub, nao na sua maquina.
+#
+# TRADE-OFF QUE VOCE PRECISA SABER:
+# O runner fica nos EUA (Azure). A latencia medida NAO representa o
+# que um usuario brasileiro sente. Mas a COMPARACAO RELATIVA continua
+# valida — todos os provedores sao medidos do mesmo lugar, ao mesmo
+# tempo, nas mesmas condicoes.
+#
+# Use isto como coleta CONTINUA (24/7, sem depender da sua maquina) e
+# rode o measure.sh local de vez em quando para calibrar o offset
+# entre "visao EUA" e "visao Brasilia".
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'    # a cada 15 min (UTC; delays de 10-30 min sao normais)
+  workflow_dispatch:           # permite disparo manual
+
+# Evita rodadas concorrentes se uma demorar mais que o intervalo.
+concurrency:
+  group: bakeoff-measure
+  cancel-in-progress: false
+
+permissions:
+  contents: write              # necessario para commitar o CSV
+
+jobs:
+  medir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Coletar
+        run: |
+          cp targets.txt.example targets.txt
+          chmod +x measure.sh
+          # RUNS=3 por rodada, igual ao local
+          OUT=resultados-ci.csv ./measure.sh --runs 3
+
+      - name: Marcar origem da medicao
+        run: |
+          # Coluna extra 'origem' distingue dados do CI dos locais.
+          # Sem isso voce misturaria latencia dos EUA com a de Brasilia
+          # no mesmo grafico e tiraria conclusoes erradas.
+          if [ ! -f resultados-ci.csv ]; then exit 0; fi
+          awk 'NR==1 { print $0 ",origem"; next } { print $0 ",github-us" }' \
+            resultados-ci.csv > tmp.csv && mv tmp.csv resultados-ci.csv
+
+      - name: Commitar resultados
+        run: |
+          git config user.name  "bakeoff-bot"
+          git config user.email "actions@github.com"
+
+          # Acumula em vez de sobrescrever: mantem o historico completo
+          if [ -f dados/historico.csv ]; then
+            tail -n +2 resultados-ci.csv >> dados/historico.csv
+          else
+            mkdir -p dados
+            cp resultados-ci.csv dados/historico.csv
+          fi
+          rm -f resultados-ci.csv
+
+          git add dados/historico.csv
+          git diff --staged --quiet || git commit -m "coleta $(date -u '+%Y-%m-%d %H:%M UTC')"
+
+          # Push com retry: rodadas concorrentes podem colidir
+          for i in 1 2 3; do
+            git pull --rebase --autostash && git push && break
+            sleep 5
+          done
