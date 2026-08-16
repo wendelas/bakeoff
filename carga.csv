@@ -19,3 +19,8 @@ timestamp,url,endpoint,concorrencia,total,ok,erros,rps,p50_ms,p95_ms,p99_ms,dura
 2026-08-15T16:29:24-03:00,https://dokploy.monstrecos.com,/cpu,10,300,300,0,6.4,1376,2814,3378,46.8971
 2026-08-15T16:31:24-03:00,https://dokploy.monstrecos.com,/cpu,25,750,717,33,6.6,2238,13856,20016,114.441
 2026-08-15T16:35:22-03:00,https://dokploy.monstrecos.com,/cpu,50,1500,1206,294,6.4,2414,20013,20016,232.699
+2026-08-15T16:54:29-03:00,https://dokploy.monstrecos.com,/db,1,30,30,0,15.7,51,63,65,1.90979
+2026-08-15T16:54:36-03:00,https://dokploy.monstrecos.com,/db,5,150,150,0,78.7,48,58,157,1.90562
+2026-08-15T16:54:44-03:00,https://dokploy.monstrecos.com,/db,10,300,300,0,148.7,48,61,154,2.01713
+2026-08-15T16:54:51-03:00,https://dokploy.monstrecos.com,/db,25,750,750,0,298.1,48,72,142,2.51621
+2026-08-15T16:55:00-03:00,https://dokploy.monstrecos.com,/db,50,1500,1500,0,449.4,48,58,143,3.33814

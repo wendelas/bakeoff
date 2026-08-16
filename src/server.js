@@ -37,12 +37,41 @@ const PAYLOAD = JSON.stringify({
   }))
 });
 
-/** Trabalho de CPU deterministico. Mesmo custo em qualquer maquina,
- *  entao a diferenca de tempo revela a CPU que voce realmente recebeu. */
-function burnCpu(rounds = 120_000) {
-  let h = crypto.createHash('sha256');
-  for (let i = 0; i < rounds; i++) h = crypto.createHash('sha256').update(String(i));
-  return h.digest('hex').slice(0, 12);
+/**
+ * Trabalho de CPU deterministico.
+ *
+ * VERSAO 2 — a anterior estava ERRADA e vale entender por que.
+ *
+ * Ela fazia 120 mil hashes de strings curtas ("0", "1", ...). Medicao:
+ * 145 ms para processar ~0,1 MB de dados reais. Ou seja, 99,9% do tempo
+ * era overhead de criar objeto Hash no V8 — nao SHA-256.
+ *
+ * Isso ficou evidente ao portar para PHP: mesmo trabalho, mesmo digest,
+ * e o PHP apareceu 15x mais rapido. Nao porque a CPU fosse melhor, mas
+ * porque `hash()` do PHP e uma chamada fina sobre C enquanto o `crypto`
+ * do Node aloca objeto por iteracao.
+ *
+ * O benchmark media overhead de linguagem, nao CPU disponivel.
+ *
+ * Correcao: hashear um buffer GRANDE poucas vezes. Assim o trabalho
+ * criptografico domina e o custo de chamada vira ruido. A metrica passa
+ * a ser MB/s, que e comparavel entre linguagens e entre maquinas.
+ */
+const CPU_BUF = Buffer.alloc(1024 * 1024, 0x42);   // 1 MB deterministico
+
+function burnCpu(rounds = 64) {
+  const t = process.hrtime.bigint();
+  let digest = '';
+  for (let i = 0; i < rounds; i++) {
+    digest = crypto.createHash('sha256').update(CPU_BUF).digest('hex');
+  }
+  const elapsedMs = Number(process.hrtime.bigint() - t) / 1e6;
+  return {
+    digest: digest.slice(0, 12),
+    mbProcessed: rounds,
+    cpuMs: Number(elapsedMs.toFixed(2)),
+    mbPerSec: Math.round(rounds / (elapsedMs / 1000))
+  };
 }
 
 async function initSchema() {
@@ -97,10 +126,11 @@ const server = http.createServer(async (req, res) => {
         return send(res, 200, { provider: PROVIDER, rows: rows.length, serverMs: ms() });
       }
 
-      case '/cpu':
-        return send(res, 200, {
-          provider: PROVIDER, digest: burnCpu(), serverMs: ms()
-        });
+      case '/cpu': {
+        const rounds = Number(url.searchParams.get('n')) || 64;
+        const r = burnCpu(Math.max(1, Math.min(512, rounds)));
+        return send(res, 200, { provider: PROVIDER, ...r, serverMs: ms() });
+      }
 
       case '/payload':
         return send(res, 200, PAYLOAD);
